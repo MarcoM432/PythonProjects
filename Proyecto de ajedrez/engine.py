@@ -36,7 +36,7 @@ class gameState ():
         de los peones o las capturas al paso de los mismos
         """
 
-        def makeMove(self, move):
+    def makeMove(self, move):
             self.board[move.startRow][move.starCol] = "--"
             self.board[move.endRow][move.endCol] = move.pieceMoved
             self.movelog.append(move) #registra en el log los movimientos, permitiendo deshacerlos luego.
