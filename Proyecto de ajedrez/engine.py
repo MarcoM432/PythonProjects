@@ -232,22 +232,22 @@ class gameState ():
         chequeo de todos los movimientos posibles.
         """
 
-        def getAllPossibleMoves(self):
-            moves = []
-            for r in range(len(self.board)): #filas
-                for c in range(len(self.board[r])): #columnas
-                    turn = self.board[r][c][0]
-                    if (turn == 'w' and self.whiteToMove) or (turn == 'b' and not self.whiteToMove): #el bando que tenga el turno
-                        piece =  self.board[r][c][1]
-                        self.moveFunctions[piece](r, c, moves) #llama la funcion correspondiente al movimiento de la pieza en turno, Por ejemplo:
+    def getAllPossibleMoves(self):
+        moves = []
+        for r in range(len(self.board)): #filas
+            for c in range(len(self.board[r])): #columnas
+                turn = self.board[r][c][0]
+                if (turn == 'w' and self.whiteToMove) or (turn == 'b' and not self.whiteToMove): #el bando que tenga el turno
+                    piece =  self.board[r][c][1]
+                    self.moveFunctions[piece](r, c, moves) #llama la funcion correspondiente al movimiento de la pieza en turno, Por ejemplo:
                         #si la pieza es el caballo (N), llamara la funcion que fue asociada al ID
-            return moves
+        return moves
 
         """
         Los movimientos de las piezas, peon, torre, caballo, bishop, reyna, rey, en ese orden
         """
 
-        def getPawnMoves(self, r, c, moves):
+    def getPawnMoves(self, r, c, moves):
             """
             Esto lo que hace es verificar el estado de la pieza y si detecta que por encima de ella hay un posible jaque al rey, entonces la bloquea
             """
@@ -287,7 +287,7 @@ class gameState ():
                             pawnPromotion = True
                         moves.append(Move((r, c), (r + moveAmount, c - 1), self.board, pawnPromotion = pawnPromotion))
                     if (r + moveAmount, c - 1) == self.enPassantPossible:
-                        moves.append(Move((r, c) (r + moveAmount, c, -1) self.board, enPassant = True))
+                        moves.append(Move((r, c), (r + moveAmount, c, -1), self.board, enPassant = True))
 
             if c + 1 <= 7: #captura a la derecha
                 if not piecePinned or pinDirection == (moveAmount, 1):
@@ -389,7 +389,146 @@ class gameState ():
         self.getRookMoves(r, c, moves)
         self.getBishopMoves(r, c, moves)
 
-    def getKingMoves()
+    def getKingMoves(self, r, c, moves):
+        rowMoves = (-1, -1, -1, 0, 0, 1, 1, 1)
+        colMoves = (-1, 0, 1, -1, 1, -1, 0, 1)
+        allyColor = "w" if self.whiteToMove else "b"
+        for m in range(8):
+            endRow = r + rowMoves[m]
+            endCol = c + colMoves[m]
+            if 0 <= endRow < 8 and 0 <=endCol < 8:
+                endPiece = self.board[endRow][endCol]
+                if endPiece[0] != allyColor: #tanto para el desplazamiento como para la captura
+                    if allyColor == 'w': #actualizacion de las coordenadas del rey blanco
+                        self.whiteKingLocation = (endRow, endCol)
+                    else: #actualizacion de las coordenadas del rey negro
+                        self.blackKingLocation = (endRow, endCol)
+                    inCheck, pins, checks = self.checkForPinsAndChecks()
+                    if not inCheck:
+                        moves.append(Move((r,c), (endRow, endCol), self.board))
+                    if allyColor == 'w':
+                        self.whiteKingLocation = (r, c)
+                    else: 
+                        self.blackKingLocation = (r, c)
+        self.getCastleMoves(r, c, moves, allyColor)
+
+    def getCastleMoves(self, r, c, moves, allyColor):
+        inCheck = self.sqUnderAttack(r, c, allyColor)
+        if inCheck: #evita el enroque por amenaza de jaque
+            return
+        if (self.whiteToMove and self.wCastleKingside) or (not self.whiteToMove and self.bCastleKingside): #enroque corto
+            self.getKingsideCastleMoves(r, c, moves, allyColor)
+        if (self.whiteToMove and self.wCastleQueenside) or (not self.whiteToMove and self.bCastleQueenside): #enroque largo
+            self.getQueensideCastleMoves(r, c, moves, allyColor)
+    
+    def getKingsideCastleMoves(self, r, c, moves, allycolor): #enroque corto
+        if self.board[r][c + 1] == '--' and self.board[r][c + 2] == '--' and not self.sqUnderAttack(r, c + 1, allycolor) and not self.sqUnderAttack(r, c + 2, allycolor):
+            moves.append(Move((r, c), (r, c + 2), self.board, castle = True))
+
+    def getQueensideCastleMoves(self, r, c, moves, allyColor): #enroque largo
+        if self.board[r][c + 1] == '--' and self.board[r][c - 2] == '--' and self.board[r][c -3] == '--' and not self.sqUnderAttack(r, c - 1, allyColor) and not self.sqUnderAttack(r, c - 2, allyColor):
+            moves.append(Move((r, c), (r, c - 2), self.board, castle = True))
+
+    def sqUnderAttack(self, r, c, allyColor):
+        enemyColor = 'w' if allyColor == 'b' else 'b'
+        directions = ((-1, 0), (0, -1), (1, 0), (0, 1), (-1, -1), (-1, 1), (1, -1), (1, 1))
+        for j in range(len(directions)):
+            d = directions[j]
+            for i in range(1, 8):
+                endRow = r + d[0] * i
+                endCol = c + d[1] * i
+                if 0 <= endRow < 8 and 0 <= endCol < 8:
+                    endPiece = self.board[endRow][endCol]
+                    if endPiece[0] == allyColor: # no atacar por esa direccion
+                        break
+                    elif endPiece[0] == enemyColor:
+                        type = endPiece[1]
+                        if (0 <= j <= 3 and type == 'R') or \
+                            (4 <= j <= 7 and type == 'B') or \
+                            (i == 1 and type == 'P' and ((enemyColor == 'w' and 6 <= j <= 7) or (enemyColor == 'b' and 4 <= j <= 5))) or \
+                            (type == 'Q') or \
+                            (i == 1 and type == 'K'):
+                            return True
+                        else: #en caso de no haber de jaque o amenaza de uno
+                            break
+                else: #fuera de limites
+                    break
+        
+        #jaques del caballo
+        knightMoves = ((-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1))
+        for m in knightMoves:
+            endRow = r + m[0]
+            endCol = c + m[1]
+            if 0 <= endRow < 8 and 0 <= endCol < 8:
+                endPiece = self.board[endRow][endCol]
+                if endPiece[0] == enemyColor and endPiece[1] == 'N': #cuando el caballo ataca al rey
+                    return True
+        return False 
+
+    def updateCastleRights(self, move):
+        if move.pieceMoved == 'wK': #si se mueve el rey blanco, se cancela todo enroque
+            self.wCastleKingside = False
+            self.wCastleQueenside = False
+        elif move.pieceMoved == 'bk': # si se mueve el rey negro, se cancela todo enroque
+            self.bCastleKingside = False
+            self.bCastleQueenside = False
+        elif move.pieceMoved == 'wR': #si se mueve la torre negra
+            if move.startRow == 7:
+                if move.startCol == 7: #se cancela el enroque corto
+                    self.wCastleKingside = False
+                elif move.startCol == 0: #se cancela el enroque largo
+                    self.wCastleQueenside = False
+        elif move.pieceMoved == 'bR': #si se meuve la torre negra
+            if move.startRow == 0:
+                if move.startCol == 7: #se cancela el enroque corto
+                    self.bCastleKingside = False
+                elif move.startCol == 0: #se cancela el enroque largo
+                    self.bCastleQueenside = False
+
+class CastleRights():
+    def __init__(self, wks, bks, wqs, bqs):
+        self.wks = wks
+        self.wqs = wqs
+        self.bks = bks
+        self.bqs = bqs
+    
+class Move():
+    ranksToRows = {"1":7, "2":6, "3":5, "4":4, "5":3, "6":2, "7":1, "8":0}
+    rowsToRanks = {v: k for k, v in ranksToRows.items()}
+
+    filesToCols = {"a":0, "b":1, "c":2, "d":3, "e":4, "f":5, "g":6, "h":7}
+    colsToFiles = {v: k for k, v in filesToCols.items()}
+
+    def __init__(self, startSq, endSq, board, enPassant = False, pawnPromotion = False, castle = False):
+        self.startRow = startSq[0]
+        self.startCol = startSq[1]
+        self.endRow = endSq[0]
+        self.endCol = endSq[1]
+        self.pieceMoved = board[self.startRow][self.startCol]
+        self.pieceCaptured = board[self.endRow][self.endCol]
+        self.enPassant = enPassant
+        self.pawnPromotion = pawnPromotion
+        self.castle = castle
+        if enPassant:
+            self.pieceCaptured = 'bP' if self.pieceMoved == 'wP' else 'wP' #la captura al paso capturando el peon contrario
+        self.moveID = self.startRow * 1000 + self.startCol * 100 + self.endRow * 10 + self.endCol
+
+    def __eq__(self, other):
+        if isinstance(other, Move):
+            return self.moveID == other.moveID
+        return False 
+
+    def getChessNotation(self):
+        return self.getRankFile(self.startRow, self.startCol) + ', ' + self.getRankFile(self.endRow, self.endCol)
+
+    def getRankFile(self, r, c):
+        return self.colsToFiles[c] + self.rowsToRanks[r]
+
+
+
+
+
+
 
 
 
