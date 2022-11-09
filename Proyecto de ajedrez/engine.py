@@ -1,4 +1,4 @@
-
+import pygame as p
 
 class gameState ():
     def __init__ (self):
@@ -155,4 +155,246 @@ class gameState ():
                 for i in range(len(moves)-1, -1, -1):
                     if moves[i].pieceMoved[1] != 'K':
                         if not (moves[i].endRow):
-                            print("hola")
+                           moves.remove(moves[i])
+            else: #jaque por partida doble, a fuerza se debe mover el rey
+                self.getKingMoves(kingRow, kingCol, moves)
+        else:
+            moves = self.getAllPossibleMoves()
+        if len(moves) == 0:
+            if self.inCheck:
+                self.checkMate = True
+            else:
+                 self.staleMate = True
+        else:
+            self.checkMate = False
+            self.staleMate = False
+        return moves
+
+    def checkForPinsAndChecks(self):
+        pins = []
+        checks = []
+        inCheck = False
+        if self.whiteToMove:
+            enemyColor = "b"
+            allyColor = "w"
+            startRow = self.whiteKingLocation[0]
+            startCol = self.whiteKingLocation[1]
+        else:
+            enemyColor = "w"
+            allyColor = "b"
+            startRow = self.blackKingLocation[0]
+            startCol = self.blackKingLocation[1]
+
+        directions = ((-1, 0), (0, -1), (1, 0), (0,1), (-1, -1), (-1, 1), (1, -1), (1, 1))
+        for j in range(len(directions)):
+            d = directions[j]
+            possiblePin = () #se reinician las piezas clavadas
+            for i in range(1, 8):
+                endRow = startRow + d[0] * i
+                endCol = startCol + d[1] * i
+                if 0 <= endRow < 8 and 0 <= endCol < 8:
+                    endPiece = self.board[endRow][endCol]
+                    if endPiece[0] == allyColor:
+                        if possiblePin == (): #cuando hay una pieza que esta clavada
+                            possiblePin = (endRow, endCol, d[0], d[1])
+                        else: #cuando hay dos piezas
+                            break 
+                    elif endPiece[0] == enemyColor:
+                        type = endPiece[1]
+                        if (0 <= j <= 3 and type == 'R') or \
+                                (4 <= j <= 7 and type == 'B') or \
+                                (i == 1 and type == 'P' and ((enemyColor == 'w' and 6 <= j <= 7) or (enemyColor == 'b' and 4 <= j <= 5))) or \
+                                (type == 'Q') or (i == 1 and type == 'K'):
+                            if possiblePin == (): #el jaque al haber espacio libre
+                                inCheck = True
+                                checks.append((endRow, endCol, d[0], d[1]))
+                                break 
+                            else: #se clava una pieza cuando esta en medio de un jaque
+                                pins.append(possiblePin)
+                                break
+                        else: #en caso de no haber de jaque o amenaza de uno
+                            break
+                else: #fuera de limites
+                    break
+            #jaques del caballo
+            knightMoves = ((-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1))
+            for m in knightMoves:
+                endRow = startRow + m[0]
+                endCol = startCol + m[1]
+                if 0 <= endRow < 8 and 0 <= endCol < 8:
+                    endPiece = self.board[endRow][endCol]
+                    if endPiece[0] == enemyColor and endPiece[1] == 'N': #cuando el caballo ataca al rey 
+                        inCheck = True
+                        checks.append((endRow, endCol, m[0], m[1]))
+            return inCheck, pins, checks
+
+        """
+        chequeo de todos los movimientos posibles.
+        """
+
+        def getAllPossibleMoves(self):
+            moves = []
+            for r in range(len(self.board)): #filas
+                for c in range(len(self.board[r])): #columnas
+                    turn = self.board[r][c][0]
+                    if (turn == 'w' and self.whiteToMove) or (turn == 'b' and not self.whiteToMove): #el bando que tenga el turno
+                        piece =  self.board[r][c][1]
+                        self.moveFunctions[piece](r, c, moves) #llama la funcion correspondiente al movimiento de la pieza en turno, Por ejemplo:
+                        #si la pieza es el caballo (N), llamara la funcion que fue asociada al ID
+            return moves
+
+        """
+        Los movimientos de las piezas, peon, torre, caballo, bishop, reyna, rey, en ese orden
+        """
+
+        def getPawnMoves(self, r, c, moves):
+            """
+            Esto lo que hace es verificar el estado de la pieza y si detecta que por encima de ella hay un posible jaque al rey, entonces la bloquea
+            """
+            piecePinned = False
+            pinDirection = ()
+            for i in range(len(self.pins)-1, -1, -1):
+                if self.pins[i][0] == r and self.pins[i][1] == c:
+                    piecePinned = True
+                    pinDirection = (self.pins[i][2], self.pins[i][3])
+                    self.pins.remove(self.pins[i])
+                    break
+            
+            if self.whiteToMove:
+                moveAmount = -1
+                startRow = 6
+                backRow = 0
+                enemyColor = 'b'
+            else:
+                moveAmount = 1
+                startRow = 1
+                backRow = 7
+                enemyColor = 'w'
+            pawnPromotion = False
+
+            if self.board[r + moveAmount][c] == '--': #movimientos de una casilla
+                if not piecePinned or pinDirection == (moveAmount, 0):
+                    if r + moveAmount == backRow:
+                        pawnPromotion = True
+                    moves.append(Move((r, c), (r + moveAmount, c), self.board, pawnPromotion = pawnPromotion))
+                    if r == startRow and self.board[r + 2 *moveAmount][c] == "--": #movimiento en dos casillas
+                        moves.append(Move((r,c), (r + 2 * moveAmount, c), self.board))
+            
+            if c - 1 >= 0: #captura a la izquierda
+                if not piecePinned or pinDirection == (moveAmount, -1):
+                    if self.board[r + moveAmount][c - 1][0] == enemyColor:
+                        if r + moveAmount == backRow:
+                            pawnPromotion = True
+                        moves.append(Move((r, c), (r + moveAmount, c - 1), self.board, pawnPromotion = pawnPromotion))
+                    if (r + moveAmount, c - 1) == self.enPassantPossible:
+                        moves.append(Move((r, c) (r + moveAmount, c, -1) self.board, enPassant = True))
+
+            if c + 1 <= 7: #captura a la derecha
+                if not piecePinned or pinDirection == (moveAmount, 1):
+                    if self.board[r + moveAmount][c + 1][0] == enemyColor:
+                        if r + moveAmount == backRow:
+                            pawnPromotion = True
+                        moves.append(Move((r, c), (r + moveAmount, c + 1), self.board, pawnPromotion = pawnPromotion))
+                    if (r + moveAmount, c + 1) == self.enPassantPossible:
+                        moves.append(Move((r, c), (r + moveAmount, c + 1), self.board, enPassant = True))
+
+    def getRookMoves(self, r, c, moves):
+        """
+        Esto lo que hace es verificar el estado de la peiza y si detecta que por encima de ella hay un posible jaque al rey, entonces la bloquea
+        """
+        piecePinned = False
+        pinDirection = ()
+        for i in range(len(self.pins) - 1, -1, -1):
+            if self.pins[i][0] == r and self.pins[i][1] == c:
+                piecePinned = True
+                pinDirection = (self.pins[i][2], self.pins[i][3])
+                if self.board[r][c][1] != 'Q':
+                    self.pins.remove(self.pins[i])
+                break
+        # los movimientos naturales de la pieza
+        directions = ((-1, 0), (0, -1), (1, 0), (0, 1))
+        enemyColor = "b" if self.whiteToMove else "w"
+        for d in directions:
+            for i in range(1, 8):
+                endRow = r + d[0] * i
+                endCol = c + d[1] * i
+                if 0 <= endRow < 8 and 0 <= endCol < 8: #Dentro del tablero
+                    if not piecePinned or pinDirection == d or pinDirection == (-d[0], - d[1]): #evita mover la pieza en caso de que este clavado
+                        endPiece = self.board[endRow][endCol]
+                        if endPiece == "--": #espacio libre y valido
+                            moves.append(Move((r, c), (endRow, endCol), self.board))
+                        elif endPiece[0] == enemyColor: #captura legal
+                            moves.append(Move((r, c), (endRow, endCol), self.board))
+                            break
+                        else: #evitar el fuego alidado
+                            break
+                else: #fuera del trablero
+                    break
+    def getKnightMoves(self, r, c, moves):
+        """
+        esto lo que hace es verificar el estado de la pieza y si detecta que por encima de ella hay un posible jaque al rey,
+        entonces la bloquea
+        """
+        piecePinned = False
+        for i in range(len(self.pins)-1, -1, -1):
+            if self.pins[i][0] == r and self.pins[i][1] == c:
+                piecePinned = True
+                self.pins.remove(self.pins[i])
+                break
+        #los movimientos naturales de la pieza
+        knightMoves = ((-2, -1), (-2, 1), (-1, -2), (-1, 2), (1, -2), (1, 2), (2, -1), (2, 1))
+        allyColor = "w" if self.whiteToMove else "b"
+        for m in knightMoves:
+            endRow = r + m[0]
+            endCol = c + m[1]
+            if 0 <= endRow < 8 and 0 <= endCol < 8:
+                if not piecePinned:
+                    endPiece = self.board[endRow][endCol]
+                    if endPiece[0] != allyColor: #tanto para el desplazamiento como para la captura
+                        moves.append(Move((r, c), (endRow, endCol), self.board))
+
+    def getBishopMoves(self, r, c, moves):
+        """
+        Esto lo que hace es verificar el estado de la pieza y si detecta que por encima de ella hay un posible
+        jaque al rey, entonces la bloquea
+        """
+        piecePinned = False
+        for i in range(len(self.pins)-1, -1, -1):
+            if self.pins[i][0] == r and self.pins[i][1] == c:
+                piecePinned = True
+                pinDirection = (self.pins[i][2], self.pins[i][3])
+                self.pins.remove(self.pins[i])
+                break
+        #los movimientos naturales de la pieza
+        directions = ((-1, -1), (1, -1), (-1, 1), (1, 1))
+        enemyColor = "b" if self.whiteToMove else "w"
+        for d in directions:
+            for i in range(1, 8):
+                endRow = r + d[0] * i
+                endCol = c + d[1] * i
+                if 0 <= endRow < 8 and 0 <= endCol < 8: #dentro del tablero
+                    if not piecePinned or pinDirection == d or pinDirection == (-d[0], -d[1]): #evitar mover la pieza en caso de que este clavada.
+                        endPiece = self.board[endRow][endCol]
+                        if endPiece == "--": #Espacio libre y valido
+                            moves.append(Move((r, c), (endRow, endCol), self.board))
+                        elif endPiece[0] == enemyColor: #captura legal
+                            moves.append(Move((r, c), (endRow, endCol), self.board))
+                            break
+                        else: #evitar el fuego aliado
+                            break
+                    else: ##fuera del tablero
+                        break
+
+    def getQueenMoves(self, r, c, moves):
+        self.getRookMoves(r, c, moves)
+        self.getBishopMoves(r, c, moves)
+
+    def getKingMoves()
+
+
+
+
+
+
+
+
